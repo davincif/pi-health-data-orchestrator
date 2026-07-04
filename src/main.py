@@ -1,25 +1,31 @@
-import asyncio
+import threading
 import signal
 from types import FrameType
+from connection import welcomer, attender
 
-from connection import welcomer
-from connection import attender
 import globalvars
 
-welcome: asyncio.Task[None]
-attending: asyncio.Task[None]
+welcome: threading.Thread
+attending: threading.Thread
 
 
-async def main():
+def main():
     global welcome, attending
 
-    signal.signal(signal.SIGTERM, exit_gracefully)
     signal.signal(signal.SIGINT, exit_gracefully)
+    signal.signal(signal.SIGTERM, exit_gracefully)
 
-    welcome = asyncio.create_task(welcomer.broadcast_listener())
-    attending = asyncio.create_task(attender.attend())
+    print(
+        f"raspbarry-health-data-collector version: {globalvars.version}\nby - davincif\ncheck me @ ldavincif.com\n"
+    )
 
-    await asyncio.gather(welcome, attending)
+    globalvars.read_for_new_connetion_lock.acquire()
+    attending = threading.Thread(target=attender.attend)
+    attending.start()
+
+    welcome = threading.Thread(target=welcomer.broadcast_listener)
+    globalvars.read_for_new_connetion_lock.acquire()
+    welcome.start()
 
 
 def exit_gracefully(signum: int, frame: FrameType | None):
@@ -28,9 +34,7 @@ def exit_gracefully(signum: int, frame: FrameType | None):
     print(f"signal {signal.Signals(signum).name} received, closing...")
 
     globalvars.kill_now = True
-    print("welcome", welcome.cancel(), "\n")
-    print("attending", attending.cancel(), "\n")
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()
