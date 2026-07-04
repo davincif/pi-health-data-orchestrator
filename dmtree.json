@@ -1,0 +1,27 @@
+{
+	"development": [
+		"dependencymanager"
+	],
+	"production": [
+		"websockets"
+	],
+	"packs": {
+		"dependencymanager": {
+			"head": true,
+			"version": "1.0.0",
+			"requires": [],
+			"required-by": [],
+			"dev": true
+		},
+		"websockets": {
+			"head": true,
+			"version": "16.0",
+			"requires": [],
+			"required-by": [],
+			"dev": false
+		}
+	},
+	"pipdeps": [
+		"pip"
+	]
+}
