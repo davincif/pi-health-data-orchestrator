@@ -29,8 +29,6 @@ def main():
 
 
 def exit_gracefully(signum: int, frame: FrameType | None):
-    global welcome, attending
-
     print(f"signal {signal.Signals(signum).name} received, closing...")
 
     globalvars.kill_now = True

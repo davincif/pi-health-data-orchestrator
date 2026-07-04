@@ -1,7 +1,8 @@
+from time import time
+import json
 import socket
 import threading
 
-from connection import authentication
 import globalvars
 
 sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -21,15 +22,23 @@ def broadcast_listener():
             data, addr = sock.recvfrom(512)
         except socket.timeout:
             continue
-        print("newcomer!")
-        attending = threading.Thread(target=newcomer_handler, args=(data, addr))
-        attending.start()
+
+        if data:
+
+            attending = threading.Thread(target=newcomer_handler, args=(data, addr))
+            attending.start()
 
 
 def newcomer_handler(data: bytes, addr: str):
-    print("newcomer_handler", data, addr)
-    auth = authentication.authenticate(data)
-    if not auth:
-        return
+    print("newcomer!")
+    print("msg", data)
+    print("addr", addr)
 
-    sock.sendto(auth.encode(), addr)
+    resp = {
+        "port": globalvars.SERVER_PORT,
+        "now": time(),
+        # "addr": sock.getsockname()[0],
+        # "version": globalvars.version,
+    }
+
+    sock.sendto(json.dumps(resp).encode(), addr)
