@@ -11,20 +11,26 @@ async def broadcast_listener():
     """watching for new connections"""
     print("watching for new connections")
 
-    global kill_now, sock
+    sock.setblocking(False)
+    sock.bind((globalvars.AUTO_CONNECT_ADDRESS, globalvars.AUTO_CONNECT_PORT))
+    loop = asyncio.get_running_loop()
 
-    sock.bind(("", globalvars.AUTO_CONNECT_PORT))
+    print("Socket bound, waiting for newcomers...")
+    try:
+        while not globalvars.kill_now:
+            data, addr = await loop.sock_recvfrom(sock, 512)
+            asyncio.create_task(new_commer_handler(data, addr))
+    except asyncio.CancelledError:
+        print("Broadcast listener cancelled.")
+    finally:
+        print("Closing welcomer socket.")
+        sock.close()
 
-    print("sock", sock)
-    while not globalvars.kill_now:
-        print("waiting for newcommeres")
-        data, addr = sock.recvfrom(512)
-        asyncio.run(new_msg_handler(data, addr))
 
-
-async def new_msg_handler(data: bytes, addr: str):
+async def new_commer_handler(data: bytes, addr: str):
     auth = authentication.authenticate(data)
     if not auth:
         return
 
-    sock.sendto(auth.encode(), addr)
+    loop = asyncio.get_running_loop()
+    await loop.sock_sendto(sock, auth.encode(), addr)
