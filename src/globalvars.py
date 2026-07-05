@@ -1,11 +1,16 @@
 import threading
 
+from database.client_manager import ClientManager
+
 kill_now = False
-version = "0.0.1"
+version = "0.0.2"
 verbose = False
 
 update_rate = 0.9
+db_back_rate = 1 * 60 * 60
 read_for_new_connetion_lock = threading.Lock()
+
+client_manager = ClientManager({"db_addrs": "db.sqlite3"})
 
 AUTO_CONNECT_PORT = 6271
 AUTO_CONNECT_ADDRESS = "0.0.0.0"

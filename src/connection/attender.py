@@ -1,9 +1,11 @@
+import json
 import threading
 from time import sleep
 import websockets.sync.server
 import websockets.exceptions
 
 import globalvars
+from models.data_types import InOutMsgBase
 
 
 def attend():
@@ -32,11 +34,18 @@ def __watch_kill(server: websockets.sync.server.Server):
 
 
 def __data_handler(websocket: websockets.sync.server.ServerConnection):
-    print(f"DEBUG: {websocket.remote_address}")
     try:
         for message in websocket:
             if globalvars.kill_now:
                 break
             # print(f"Recebido de {websocket.remote_address}: {message}")
+            data: InOutMsgBase = json.loads(message)
+
+            if not "command" in data:
+                continue
+            if data["command"] == "helth-check-info":
+                globalvars.client_manager.update_health_check(data)
+            elif data["command"] == "update-unmutable":
+                globalvars.client_manager.update_unmutable(data)
     except websockets.exceptions.ConnectionClosedError:
         print(f"Cliente {websocket.remote_address} desconectado.")

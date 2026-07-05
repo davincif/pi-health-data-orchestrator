@@ -3,7 +3,10 @@
 		"dependencymanager"
 	],
 	"production": [
-		"websockets"
+		"websockets",
+		"SQLAlchemy",
+		"greenlet",
+		"typing-extensions"
 	],
 	"packs": {
 		"dependencymanager": {
@@ -18,6 +21,34 @@
 			"version": "16.0",
 			"requires": [],
 			"required-by": [],
+			"dev": false
+		},
+		"SQLAlchemy": {
+			"head": true,
+			"version": "2.0.51",
+			"requires": [
+				"greenlet",
+				"typing-extensions"
+			],
+			"required-by": [],
+			"dev": false
+		},
+		"greenlet": {
+			"head": false,
+			"version": "3.5.3",
+			"requires": [],
+			"required-by": [
+				"sqlalchemy"
+			],
+			"dev": false
+		},
+		"typing-extensions": {
+			"head": false,
+			"version": "4.16.0",
+			"requires": [],
+			"required-by": [
+				"sqlalchemy"
+			],
 			"dev": false
 		}
 	},

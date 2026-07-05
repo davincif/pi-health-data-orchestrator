@@ -32,6 +32,7 @@ def exit_gracefully(signum: int, frame: FrameType | None):
     print(f"signal {signal.Signals(signum).name} received, closing...")
 
     globalvars.kill_now = True
+    globalvars.client_manager.close()
 
 
 if __name__ == "__main__":
