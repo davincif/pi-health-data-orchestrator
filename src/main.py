@@ -19,8 +19,8 @@ def main():
         f"raspbarry-health-data-collector version: {globalvars.version}\nby - davincif\ncheck me @ ldavincif.com\n"
     )
 
-    globalvars.read_for_new_connetion_lock.acquire()
     attending = threading.Thread(target=attender.attend)
+    globalvars.read_for_new_connetion_lock.acquire()
     attending.start()
 
     welcome = threading.Thread(target=welcomer.broadcast_listener)
