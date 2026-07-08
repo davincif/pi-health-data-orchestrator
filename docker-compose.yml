@@ -1,0 +1,14 @@
+services:
+  pi-health-data-orchestrator:
+    build: .
+    image: ldavincif/pi-health-data-orchestrator
+    container_name: pi-health-data-orchestrator
+    volumes:
+      - pi_orchestrator_data:/app/data
+    network_mode: "host"
+    uts: "host"
+    environment:
+      DB_PATH: /app/data/
+
+volumes:
+  pi_orchestrator_data:

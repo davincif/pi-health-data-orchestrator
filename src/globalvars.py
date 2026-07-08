@@ -1,3 +1,4 @@
+import os
 import threading
 
 from database.client_manager import ClientManager
@@ -5,6 +6,7 @@ from database.client_manager import ClientManager
 kill_now = False
 version = "0.0.2"
 verbose = False
+DB_PATH = os.getenv("DB_PATH", "./data/")
 
 update_rate = 0.9
 db_back_rate = 1 * 60 * 60

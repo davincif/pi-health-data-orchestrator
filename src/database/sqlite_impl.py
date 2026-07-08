@@ -193,14 +193,17 @@ class SQLiteImpl(DBAdapter):
     def __make_file_name(self, conf: Any) -> str:
         now = datetime.now()
 
-        return (
-            "{:02d}".format(now.day)
-            + "-"
-            + "{:02d}".format(now.month)
-            + "-"
-            + str(now.year)
-            + "."
-            + conf["db_addrs"]
+        return os.path.join(
+            globalvars.DB_PATH,
+            (
+                "{:02d}".format(now.day)
+                + "-"
+                + "{:02d}".format(now.month)
+                + "-"
+                + str(now.year)
+                + "."
+                + conf["db_addrs"]
+            ),
         )
 
     def __reload_db(self) -> sqlite3.Connection:
