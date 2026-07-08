@@ -3,10 +3,15 @@ services:
     build: .
     image: ldavincif/pi-health-data-orchestrator
     container_name: pi-health-data-orchestrator
+    restart: unless-stopped
     volumes:
       - pi_orchestrator_data:/app/data
-    network_mode: "host"
-    uts: "host"
+    security_opt:
+      - no-new-privileges:true
+    ports:
+      - "7325:7325/tcp"
+      - "7325:7325/udp"
+    # network_mode: "host"
     environment:
       DB_PATH: /app/data/
 

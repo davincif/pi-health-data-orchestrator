@@ -1,7 +1,8 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 import os
 import sqlite3
-from time import perf_counter
+import threading
+from time import perf_counter, sleep
 from typing import Any, cast
 
 from sqlalchemy import (
@@ -48,6 +49,8 @@ class SQLiteImpl(DBAdapter):
     backup_counter: float = 0.0
     backup_mark: float = 0.0
 
+    _renewal_lock = threading.Lock()
+
     def connect(self, conf: Any):
         self._shared_memory_conn = sqlite3.connect(":memory:", check_same_thread=False)
         self.memory_db = create_engine(
@@ -63,119 +66,132 @@ class SQLiteImpl(DBAdapter):
         self.backup_counter = 0.0
         self.backup_mark = perf_counter()
 
+        threading.Thread(
+            target=self.__set_db_periodic_flush, args=[conf], daemon=True
+        ).start()
+
         return self
 
     def close(self):
-        self.__backup()
-        if hasattr(self, "hard_db_conn") and self.hard_db_conn:
-            self.hard_db_conn.close()
-        self.memory_db_conn.close()
-        self.memory_db.dispose()
-        if hasattr(self, "_shared_memory_conn") and self._shared_memory_conn:
-            self._shared_memory_conn.close()
-
-    def get_new_section(self):
-        Session = sessionmaker(bind=self.memory_db)
-        return Session()
+        with self._renewal_lock:
+            self.__backup()
+            if hasattr(self, "hard_db_conn") and self.hard_db_conn:
+                self.hard_db_conn.close()
+            self.memory_db_conn.close()
+            self.memory_db.dispose()
+            if hasattr(self, "_shared_memory_conn") and self._shared_memory_conn:
+                self._shared_memory_conn.close()
 
     def register_device(self, data: TransitionalClientRegistry):
-        session = self.get_new_section()
+        with self._renewal_lock:
+            session = self.__get_new_section()
 
-        stmt = select(Device).where(Device.name == data["requester"])
-        found_device = session.scalar(stmt)
+            stmt = select(Device).where(Device.name == data["requester"])
+            found_device = session.scalar(stmt)
 
-        if found_device:
+            if found_device:
+                session.close()
+                return
+
+            device = Device(
+                name=data["requester"],
+            )
+
+            session.add(device)
+            session.commit()
             session.close()
-            return
-
-        device = Device(
-            name=data["requester"],
-        )
-        session.add(device)
-        session.commit()
-        session.close()
 
     def update_health_check(self, health: IncomingMutableUpdate):
-        session = self.get_new_section()
+        with self._renewal_lock:
+            session = self.__get_new_section()
 
-        user = session.query(Device).filter(Device.name == health["requester"]).first()
-        if user is None:
-            return
+            user = (
+                session.query(Device).filter(Device.name == health["requester"]).first()
+            )
+            if user is None:
+                return
 
-        time: float | None = get_item_else(health, 0.0, "now")
-        now = datetime.fromtimestamp(time) if time != 0.0 else None
-        user.last_collection_at = now
+            time: float | None = get_item_else(health, 0.0, "now")
+            now = datetime.fromtimestamp(time) if time != 0.0 else None
+            user.last_collection_at = now
 
-        cpu, gpu = self.__add_temperature(user.id, now, health)
-        session.add(cpu)
-        session.add(gpu)
+            cpu, gpu = self.__add_temperature(user.id, now, health)
+            session.add(cpu)
+            session.add(gpu)
 
-        [process, cores] = self.__add_process(user.id, now, health)
-        session.add(process)
-        for core in cores:
-            session.add(core)
+            [process, cores] = self.__add_process(user.id, now, health)
+            session.add(process)
+            for core in cores:
+                session.add(core)
 
-        [vmem, smem] = self.__add_memory(user.id, now, health)
-        session.add(vmem)
-        session.add(smem)
+            [vmem, smem] = self.__add_memory(user.id, now, health)
+            session.add(vmem)
+            session.add(smem)
 
-        disk = self.__add_disk(user.id, now, health)
-        session.add(disk)
+            disk = self.__add_disk(user.id, now, health)
+            session.add(disk)
 
-        net = self.__add_Network(user.id, now, health)
-        session.add(net)
+            net = self.__add_Network(user.id, now, health)
+            session.add(net)
 
-        cost = self.__add_cost(user.id, now, health)
-        session.add(cost)
+            cost = self.__add_cost(user.id, now, health)
+            session.add(cost)
 
-        session.commit()
-        session.close()
+            session.commit()
+            session.close()
 
-        self.__update_backup()
+            self.__update_backup()
 
     def update_device(self, device_info: IncomingUnmutableUpdate):
-        session = self.get_new_section()
+        with self._renewal_lock:
+            session = self.__get_new_section()
 
-        user = (
-            session.query(Device)
-            .filter(Device.name == device_info["requester"])
-            .first()
-        )
-        if user is None:
-            return
-
-        try:
-            time: float | None = get_item_else(device_info, 0.0, "now")
-            now = datetime.fromtimestamp(time) if time != 0.0 else None
-
-            user.last_collection_at = now
-            user.boot_time = get_item_else(device_info, 0, "uptime", "bt")
-            user.core = get_item_else(device_info, 0, "process", "cr")
-            user.logical_core = get_item_else(device_info, 0, "process", "lcr")
-            user.min_freq = get_item_else(device_info, 0, "process", "mnf")
-            user.max_freq = get_item_else(device_info, 0, "process", "mxf")
-            user.virtual_memory_total = get_item_else(
-                device_info, 0, "memory", "v", "t"
+            user = (
+                session.query(Device)
+                .filter(Device.name == device_info["requester"])
+                .first()
             )
-            user.swap_memory_total = get_item_else(device_info, 0, "memory", "s", "t")
+            if user is None:
+                return
 
-            disk = session.query(Disk).filter(Disk.device_id == user.id).first()
-            if disk is None:
-                disk = Disk(device_id=user.id, registred_at=now)
-            else:
-                disk.registred_at = now  # type: ignore
+            try:
+                time: float | None = get_item_else(device_info, 0.0, "now")
+                now = datetime.fromtimestamp(time) if time != 0.0 else None
 
-            disk.total = get_item_else(device_info, 0, "disk", "t")
-            disk.used = get_item_else(device_info, 0, "disk", "u")
-            disk.free = get_item_else(device_info, 0, "disk", "f")
-            disk.percent = get_item_else(device_info, 0.0, "disk", "p")
+                user.last_collection_at = now
+                user.boot_time = get_item_else(device_info, 0, "uptime", "bt")
+                user.core = get_item_else(device_info, 0, "process", "cr")
+                user.logical_core = get_item_else(device_info, 0, "process", "lcr")
+                user.min_freq = get_item_else(device_info, 0, "process", "mnf")
+                user.max_freq = get_item_else(device_info, 0, "process", "mxf")
+                user.virtual_memory_total = get_item_else(
+                    device_info, 0, "memory", "v", "t"
+                )
+                user.swap_memory_total = get_item_else(
+                    device_info, 0, "memory", "s", "t"
+                )
 
-            session.add(disk)
-        except Exception as exp:
-            print("exp", exp)
+                disk = session.query(Disk).filter(Disk.device_id == user.id).first()
+                if disk is None:
+                    disk = Disk(device_id=user.id, registred_at=now)
+                else:
+                    disk.registred_at = now  # type: ignore
 
-        session.commit()
-        session.close()
+                disk.total = get_item_else(device_info, 0, "disk", "t")
+                disk.used = get_item_else(device_info, 0, "disk", "u")
+                disk.free = get_item_else(device_info, 0, "disk", "f")
+                disk.percent = get_item_else(device_info, 0.0, "disk", "p")
+
+                session.add(disk)
+            except Exception as exp:
+                print("exp", exp)
+
+            session.commit()
+            session.close()
+
+    def __get_new_section(self):
+        Session = sessionmaker(bind=self.memory_db)
+        return Session()
 
     def __backup(self):
         # source_raw: sqlite3.Connection
@@ -211,9 +227,7 @@ class SQLiteImpl(DBAdapter):
             os.path.exists(self.file_addrs) and os.path.getsize(self.file_addrs) > 0
         )
 
-        self.hard_db_conn = sqlite3.connect(
-            self.file_addrs,
-        )
+        self.hard_db_conn = sqlite3.connect(self.file_addrs)
 
         if does_db_exists:
             source_raw = cast(
@@ -386,3 +400,40 @@ class SQLiteImpl(DBAdapter):
 
         if self.backup_counter - self.backup_mark > globalvars.db_back_rate:
             self.__backup()
+
+    def __set_db_periodic_flush(self, conf: Any):
+        target_hour = 0
+        target_minute = 0
+
+        now = datetime.now()
+        target_time = now.replace(
+            hour=target_hour, minute=target_minute, second=0, microsecond=0
+        )
+
+        if now > target_time:
+            target_time += timedelta(days=1)
+
+        seconds_to_wait = (target_time - now).total_seconds()
+        print(f"Sleeping for {seconds_to_wait} seconds until {target_time}...")
+
+        sleep(seconds_to_wait)
+        self.__renewal(conf)
+
+    def __renewal(self, conf: Any):
+        with self._renewal_lock:
+            self.backup_counter = 0.0
+            self.backup_mark = perf_counter()
+
+            self.__backup()
+
+            self._shared_memory_conn = sqlite3.connect(
+                ":memory:", check_same_thread=False
+            )
+            self.memory_db = create_engine(
+                "sqlite://",
+                creator=lambda: self._shared_memory_conn,
+                poolclass=StaticPool,
+            )
+            self.memory_db_conn = self.memory_db.connect()
+
+            self.file_addrs = self.__make_file_name(conf)

@@ -1,8 +1,8 @@
 import threading
 import signal
 from types import FrameType
-from connection import welcomer, attender
 
+from connection import attender
 import globalvars
 
 welcome: threading.Thread
@@ -20,12 +20,12 @@ def main():
     )
 
     attending = threading.Thread(target=attender.attend)
-    globalvars.read_for_new_connetion_lock.acquire()
+    # globalvars.read_for_new_connetion_lock.acquire()
     attending.start()
 
-    welcome = threading.Thread(target=welcomer.broadcast_listener)
-    globalvars.read_for_new_connetion_lock.acquire()
-    welcome.start()
+    # welcome = threading.Thread(target=welcomer.broadcast_listener)
+    # globalvars.read_for_new_connetion_lock.acquire()
+    # welcome.start()
 
 
 def exit_gracefully(signum: int, frame: FrameType | None):

@@ -1,5 +1,4 @@
 import os
-import threading
 
 from database.client_manager import ClientManager
 
@@ -10,12 +9,9 @@ DB_PATH = os.getenv("DB_PATH", "./data/")
 
 update_rate = 0.9
 db_back_rate = 1 * 60 * 60
-read_for_new_connetion_lock = threading.Lock()
+# read_for_new_connetion_lock = threading.Lock()
 
 client_manager = ClientManager({"db_addrs": "db.sqlite3"})
-
-AUTO_CONNECT_PORT = 6271
-AUTO_CONNECT_ADDRESS = "0.0.0.0"
 
 SERVER_ADDRESS = "0.0.0.0"
 SERVER_PORT = 7325

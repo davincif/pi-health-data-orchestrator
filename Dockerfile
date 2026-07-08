@@ -18,7 +18,6 @@ ENV PATH="/venv/bin:$PATH"
 
 COPY ./src .
 
-EXPOSE 6271
 EXPOSE 7325
 
 CMD ["/venv/bin/python3", "main.py"]

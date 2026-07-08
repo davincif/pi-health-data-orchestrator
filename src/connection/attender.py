@@ -17,7 +17,7 @@ def attend():
         __data_handler, globalvars.SERVER_ADDRESS, globalvars.SERVER_PORT
     )
 
-    globalvars.read_for_new_connetion_lock.release()
+    # globalvars.read_for_new_connetion_lock.release()
     print("WebSocket online.")
 
     threading.Thread(target=__watch_kill, args=[server], daemon=True).start()
