@@ -66,9 +66,7 @@ class SQLiteImpl(DBAdapter):
         self.backup_counter = 0.0
         self.backup_mark = perf_counter()
 
-        threading.Thread(
-            target=self.__set_db_periodic_flush, args=[conf], daemon=True
-        ).start()
+        threading.Thread(target=self.__set_db_periodic_flush, args=[conf]).start()
 
         return self
 
@@ -131,7 +129,7 @@ class SQLiteImpl(DBAdapter):
             disk = self.__add_disk(user.id, now, health)
             session.add(disk)
 
-            net = self.__add_Network(user.id, now, health)
+            net = self.__add_network(user.id, now, health)
             session.add(net)
 
             cost = self.__add_cost(user.id, now, health)
@@ -202,9 +200,8 @@ class SQLiteImpl(DBAdapter):
         target_raw = sqlite3.connect(self.file_addrs)
         try:
             source_raw.backup(target_raw)
-        finally:
-            target_raw.close()
-        pass
+        except Exception as exp:
+            pass
 
     def __make_file_name(self, conf: Any) -> str:
         now = datetime.now()
@@ -366,7 +363,7 @@ class SQLiteImpl(DBAdapter):
 
         return disk
 
-    def __add_Network(
+    def __add_network(
         self, device_id: int, now: datetime | None, health: IncomingMutableUpdate
     ) -> Network:
         net = Network(
@@ -402,29 +399,28 @@ class SQLiteImpl(DBAdapter):
             self.__backup()
 
     def __set_db_periodic_flush(self, conf: Any):
-        target_hour = 0
-        target_minute = 0
+        while True:
+            target_hour = 0
+            target_minute = 0
 
-        now = datetime.now()
-        target_time = now.replace(
-            hour=target_hour, minute=target_minute, second=0, microsecond=0
-        )
+            now = datetime.now()
+            target_time = now.replace(
+                hour=target_hour, minute=target_minute, second=0, microsecond=0
+            )
 
-        if now > target_time:
-            target_time += timedelta(days=1)
+            if now > target_time:
+                target_time += timedelta(days=1)
 
-        seconds_to_wait = (target_time - now).total_seconds()
-        print(f"Sleeping for {seconds_to_wait} seconds until {target_time}...")
+            seconds_to_wait = (target_time - now).total_seconds()
+            print(f"Sleeping for {seconds_to_wait} seconds until {target_time}...")
 
-        sleep(seconds_to_wait)
-        self.__renewal(conf)
+            sleep(seconds_to_wait)
+            self.__renewal(conf)
 
     def __renewal(self, conf: Any):
-        with self._renewal_lock:
-            self.backup_counter = 0.0
-            self.backup_mark = perf_counter()
+        self.close()
 
-            self.__backup()
+        with self._renewal_lock:
 
             self._shared_memory_conn = sqlite3.connect(
                 ":memory:", check_same_thread=False
@@ -437,3 +433,8 @@ class SQLiteImpl(DBAdapter):
             self.memory_db_conn = self.memory_db.connect()
 
             self.file_addrs = self.__make_file_name(conf)
+
+            self.hard_db_conn = self.__reload_db()
+
+            self.backup_counter = 0.0
+            self.backup_mark = perf_counter()
