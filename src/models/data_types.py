@@ -5,6 +5,8 @@ from .update_mutable import MDisk, MNet, MProcess, MTemp, MMemory
 
 from .update_unmutable import UMDisk, UMMemory, UMUptime
 
+Addr = tuple[str, int]
+
 
 class InOutMsgBase(TypedDict):
     requester: Required[str]
@@ -14,7 +16,7 @@ class InOutMsgBase(TypedDict):
 
 
 class IncomingClientRegistry(InOutMsgBase):
-    addr: Required[tuple[str, int]]
+    addr: Required[Addr]
 
 
 class TransitionalClientRegistry(InOutMsgBase):

@@ -14,9 +14,9 @@ class DBAdapter(ABC):
     def close(self):
         pass
 
-    @abstractmethod
-    def register_device(self, data: Any):
-        pass
+    # @abstractmethod
+    # def register_device(self, data: Any) -> Device | None:
+    #     pass
 
     @abstractmethod
     def update_health_check(self, health: IncomingMutableUpdate):

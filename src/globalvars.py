@@ -8,8 +8,7 @@ verbose = False
 DB_PATH = os.getenv("DB_PATH", "./data/")
 
 update_rate = 0.9
-db_back_rate = 1 * 60 * 60
-# read_for_new_connetion_lock = threading.Lock()
+db_back_rate_s = 30
 
 client_manager = ClientManager({"db_addrs": "db.sqlite3"})
 

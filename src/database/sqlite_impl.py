@@ -12,7 +12,7 @@ from sqlalchemy import (
     create_engine,
     select,
 )
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import Session, sessionmaker
 
 import globalvars
 from utils.dict_utils import get_item_else
@@ -34,7 +34,6 @@ from .models.data_description import (
 from models.data_types import (
     IncomingMutableUpdate,
     IncomingUnmutableUpdate,
-    TransitionalClientRegistry,
 )
 
 from .db_adapter import DBAdapter
@@ -66,7 +65,7 @@ class SQLiteImpl(DBAdapter):
         self.backup_counter = 0.0
         self.backup_mark = perf_counter()
 
-        threading.Thread(target=self.__set_db_periodic_flush, args=[conf]).start()
+        threading.Thread(target=self.__set_db_periodic_renewal, args=[conf]).start()
 
         return self
 
@@ -79,25 +78,6 @@ class SQLiteImpl(DBAdapter):
             self.memory_db.dispose()
             if hasattr(self, "_shared_memory_conn") and self._shared_memory_conn:
                 self._shared_memory_conn.close()
-
-    def register_device(self, data: TransitionalClientRegistry):
-        with self._renewal_lock:
-            session = self.__get_new_section()
-
-            stmt = select(Device).where(Device.name == data["requester"])
-            found_device = session.scalar(stmt)
-
-            if found_device:
-                session.close()
-                return
-
-            device = Device(
-                name=data["requester"],
-            )
-
-            session.add(device)
-            session.commit()
-            session.close()
 
     def update_health_check(self, health: IncomingMutableUpdate):
         with self._renewal_lock:
@@ -150,6 +130,11 @@ class SQLiteImpl(DBAdapter):
                 .first()
             )
             if user is None:
+                user = self.__register_device(
+                    session,
+                    device_info,
+                )
+            if user is None:
                 return
 
             try:
@@ -197,7 +182,7 @@ class SQLiteImpl(DBAdapter):
             sqlite3.Connection, self.memory_db_conn.connection.dbapi_connection
         )
 
-        target_raw = sqlite3.connect(self.file_addrs)
+        target_raw = sqlite3.connect(self.file_addrs, check_same_thread=False)
         try:
             source_raw.backup(target_raw)
         except Exception as exp:
@@ -395,10 +380,10 @@ class SQLiteImpl(DBAdapter):
     def __update_backup(self):
         self.backup_counter = perf_counter()
 
-        if self.backup_counter - self.backup_mark > globalvars.db_back_rate:
+        if self.backup_counter - self.backup_mark > globalvars.db_back_rate_s:
             self.__backup()
 
-    def __set_db_periodic_flush(self, conf: Any):
+    def __set_db_periodic_renewal(self, conf: Any):
         while True:
             target_hour = 0
             target_minute = 0
@@ -414,10 +399,12 @@ class SQLiteImpl(DBAdapter):
             seconds_to_wait = (target_time - now).total_seconds()
             print(f"Sleeping for {seconds_to_wait} seconds until {target_time}...")
 
+            seconds_to_wait = 60
             sleep(seconds_to_wait)
             self.__renewal(conf)
 
     def __renewal(self, conf: Any):
+        print("__renewal")
         self.close()
 
         with self._renewal_lock:
@@ -438,3 +425,20 @@ class SQLiteImpl(DBAdapter):
 
             self.backup_counter = 0.0
             self.backup_mark = perf_counter()
+
+    def __register_device(self, session: Session, data: IncomingUnmutableUpdate):
+        with self._renewal_lock:
+
+            stmt = select(Device).where(Device.name == data["requester"])
+            found_device = session.scalar(stmt)
+
+            if found_device:
+                return
+
+            device = Device(
+                name=data["requester"],
+            )
+
+            session.add(device)
+
+            return device
