@@ -5,7 +5,7 @@ from .update_mutable import MDisk, MNet, MProcess, MTemp, MMemory
 
 from .update_unmutable import UMDisk, UMMemory, UMUptime
 
-Addr = tuple[str, int]
+type Addr = tuple[str, int]
 
 
 class InOutMsgBase(TypedDict):

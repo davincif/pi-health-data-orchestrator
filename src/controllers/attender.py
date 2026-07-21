@@ -14,10 +14,12 @@ def attend():
     )
 
     server = websockets.sync.server.serve(
-        __data_handler, globalvars.SERVER_ADDRESS, globalvars.SERVER_PORT
+        __data_handler,
+        globalvars.SERVER_ADDRESS,
+        globalvars.SERVER_PORT,
+        # ping_interval=None,
+        # OR: ping_interval=60, ping_timeout=60
     )
-
-    # globalvars.read_for_new_connetion_lock.release()
     print("WebSocket online.")
 
     threading.Thread(target=__watch_kill, args=[server], daemon=True).start()
@@ -47,5 +49,7 @@ def __data_handler(websocket: websockets.sync.server.ServerConnection):
                 globalvars.client_manager.update_health_check(data)
             elif data["command"] == "update-unmutable":
                 globalvars.client_manager.update_unmutable(data)
-    except websockets.exceptions.ConnectionClosedError:
-        print(f"Cliente {websocket.remote_address} desconectado.")
+    except websockets.exceptions.ConnectionClosedError as exp:
+        print(f"Cliente {websocket.remote_address} desconectado.", exp)
+    except Exception as exp:
+        print("An unrecognizaned just happened", exp)

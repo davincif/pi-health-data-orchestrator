@@ -42,7 +42,6 @@ from .db_adapter import DBAdapter
 class SQLiteImpl(DBAdapter):
     memory_db: Engine
     memory_db_conn: Connection
-    hard_db_conn: sqlite3.Connection
     _shared_memory_conn: sqlite3.Connection
 
     backup_counter: float = 0.0
@@ -60,7 +59,7 @@ class SQLiteImpl(DBAdapter):
         self.memory_db_conn = self.memory_db.connect()
 
         self.file_addrs = self.__make_file_name(conf)
-        self.hard_db_conn = self.__reload_db()
+        self.__reload_db()
 
         self.backup_counter = 0.0
         self.backup_mark = perf_counter()
@@ -72,14 +71,13 @@ class SQLiteImpl(DBAdapter):
     def close(self):
         with self._renewal_lock:
             self.__backup()
-            if hasattr(self, "hard_db_conn") and self.hard_db_conn:
-                self.hard_db_conn.close()
             self.memory_db_conn.close()
             self.memory_db.dispose()
             if hasattr(self, "_shared_memory_conn") and self._shared_memory_conn:
                 self._shared_memory_conn.close()
 
     def update_health_check(self, health: IncomingMutableUpdate):
+        print("\nupdate_health_check", health, "\n")
         with self._renewal_lock:
             session = self.__get_new_section()
 
@@ -121,7 +119,9 @@ class SQLiteImpl(DBAdapter):
             self.__update_backup()
 
     def update_device(self, device_info: IncomingUnmutableUpdate):
+        print("update_device")
         with self._renewal_lock:
+            print("device_info", device_info)
             session = self.__get_new_section()
 
             user = (
@@ -134,6 +134,7 @@ class SQLiteImpl(DBAdapter):
                     session,
                     device_info,
                 )
+            print("user", user)
             if user is None:
                 return
 
@@ -166,10 +167,10 @@ class SQLiteImpl(DBAdapter):
                 disk.percent = get_item_else(device_info, 0.0, "disk", "p")
 
                 session.add(disk)
+                session.commit()
             except Exception as exp:
                 print("exp", exp)
 
-            session.commit()
             session.close()
 
     def __get_new_section(self):
@@ -177,16 +178,22 @@ class SQLiteImpl(DBAdapter):
         return Session()
 
     def __backup(self):
-        # source_raw: sqlite3.Connection
+        print("__backup")
         source_raw = cast(
             sqlite3.Connection, self.memory_db_conn.connection.dbapi_connection
         )
 
-        target_raw = sqlite3.connect(self.file_addrs, check_same_thread=False)
+        target_raw = None
         try:
+            target_raw = sqlite3.connect(self.file_addrs, check_same_thread=False)
             source_raw.backup(target_raw)
+            print("backup done!")
         except Exception as exp:
+            print("deu bósnia no backup!", exp)
             pass
+        finally:
+            if target_raw:
+                target_raw.close()
 
     def __make_file_name(self, conf: Any) -> str:
         now = datetime.now()
@@ -204,25 +211,22 @@ class SQLiteImpl(DBAdapter):
             ),
         )
 
-    def __reload_db(self) -> sqlite3.Connection:
+    def __reload_db(self):
         does_db_exists = (
             os.path.exists(self.file_addrs) and os.path.getsize(self.file_addrs) > 0
         )
 
-        self.hard_db_conn = sqlite3.connect(self.file_addrs)
-
         if does_db_exists:
+            hard_db_conn = sqlite3.connect(self.file_addrs)
             source_raw = cast(
                 sqlite3.Connection, self.memory_db_conn.connection.dbapi_connection
             )
             try:
-                self.hard_db_conn.backup(source_raw)
+                hard_db_conn.backup(source_raw)
             finally:
-                self.hard_db_conn.close()
+                hard_db_conn.close()
         else:
             make_db(self.memory_db)
-
-        return self.hard_db_conn
 
     def __add_temperature(
         self, device_id: int, now: datetime | None, health: IncomingMutableUpdate
@@ -399,6 +403,7 @@ class SQLiteImpl(DBAdapter):
             seconds_to_wait = (target_time - now).total_seconds()
             print(f"Sleeping for {seconds_to_wait} seconds until {target_time}...")
 
+            # TODO REMOVE THIS TEST!
             seconds_to_wait = 60
             sleep(seconds_to_wait)
             self.__renewal(conf)
@@ -421,7 +426,7 @@ class SQLiteImpl(DBAdapter):
 
             self.file_addrs = self.__make_file_name(conf)
 
-            self.hard_db_conn = self.__reload_db()
+            self.__reload_db()
 
             self.backup_counter = 0.0
             self.backup_mark = perf_counter()
